@@ -1,5 +1,5 @@
 const BaseController = require("../../../core/baseController");
-const { User, Role, Permission } = require("../associations");
+const { User, Role } = require("../associations");
 const bcrypt = require("bcryptjs");
 const config = require("config");
 const Joi = require("joi");
@@ -17,12 +17,7 @@ class UserController extends BaseController {
       const users = await User.findAll({
         include: [{
           model: Role,
-          as: "role",
-          include: [{
-            model: Permission,
-            as: "permissions",
-            through: { attributes: [] }
-          }]
+          as: "role"
         }]
       });
       console.log("✅ Users found successfully");
@@ -46,12 +41,7 @@ class UserController extends BaseController {
       const user = await User.findByPk(req.params.id, {
         include: [{
           model: Role,
-          as: "role",
-          include: [{
-            model: Permission,
-            as: "permissions",
-            through: { attributes: [] }
-          }]
+          as: "role"
         }]
       });
       
@@ -230,12 +220,7 @@ class UserController extends BaseController {
         },
         include: [{
           model: Role,
-          as: "role",
-          include: [{
-            model: Permission,
-            as: "permissions",
-            through: { attributes: [] }
-          }]
+          as: "role"
         }]
       });
 

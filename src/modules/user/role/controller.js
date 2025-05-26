@@ -1,22 +1,15 @@
 const BaseController = require("../../../core/baseController");
 const Role = require("./model");
-const Permission = require("../permission/model");
 
 class RoleController extends BaseController {
   constructor() {
     super(Role);
   }
 
-  // ✅ دریافت تمام نقش‌ها به همراه دسترسی‌هایشان
+  // ✅ دریافت تمام نقش‌ها
   async getAll(req, res) {
     try {
-      const roles = await Role.findAll({
-        include: [{
-          model: Permission,
-          as: "rolePermissions",
-          through: { attributes: [] }
-        }]
-      });
+      const roles = await Role.findAll();
       return this.response(res, 200, true, "لیست نقش‌ها دریافت شد.", roles);
     } catch (error) {
       return this.response(res, 500, false, "خطا در دریافت داده‌ها", null, error);
@@ -26,13 +19,7 @@ class RoleController extends BaseController {
   // ✅ دریافت یک نقش با ID
   async getOne(req, res) {
     try {
-      const role = await Role.findByPk(req.params.id, {
-        include: [{
-          model: Permission,
-          as: "rolePermissions",
-          through: { attributes: [] }
-        }]
-      });
+      const role = await Role.findByPk(req.params.id);
       if (!role) {
         return this.response(res, 404, false, "نقش یافت نشد.");
       }
@@ -45,22 +32,9 @@ class RoleController extends BaseController {
   // ✅ ایجاد نقش جدید
   async create(req, res) {
     try {
-      const { name, nameEn, nameFa, permissions } = req.body;
+      const { name, nameEn, nameFa } = req.body;
       const role = await Role.create({ name, nameEn, nameFa });
-      
-      if (permissions && permissions.length > 0) {
-        await role.setRolePermissions(permissions);
-      }
-
-      const roleWithPermissions = await Role.findByPk(role.id, {
-        include: [{
-          model: Permission,
-          as: "rolePermissions",
-          through: { attributes: [] }
-        }]
-      });
-
-      return this.response(res, 201, true, "نقش جدید ایجاد شد.", roleWithPermissions);
+      return this.response(res, 201, true, "نقش جدید ایجاد شد.", role);
     } catch (error) {
       return this.response(res, 500, false, "خطا در ایجاد نقش", null, error);
     }
@@ -69,7 +43,7 @@ class RoleController extends BaseController {
   // ✅ به‌روزرسانی نقش
   async update(req, res) {
     try {
-      const { name, nameEn, nameFa, permissions } = req.body;
+      const { name, nameEn, nameFa } = req.body;
       const role = await Role.findByPk(req.params.id);
       
       if (!role) {
@@ -77,20 +51,7 @@ class RoleController extends BaseController {
       }
 
       await role.update({ name, nameEn, nameFa });
-      
-      if (permissions) {
-        await role.setRolePermissions(permissions);
-      }
-
-      const updatedRole = await Role.findByPk(role.id, {
-        include: [{
-          model: Permission,
-          as: "rolePermissions",
-          through: { attributes: [] }
-        }]
-      });
-
-      return this.response(res, 200, true, "نقش به‌روزرسانی شد.", updatedRole);
+      return this.response(res, 200, true, "نقش به‌روزرسانی شد.", role);
     } catch (error) {
       return this.response(res, 500, false, "خطا در به‌روزرسانی نقش", null, error);
     }

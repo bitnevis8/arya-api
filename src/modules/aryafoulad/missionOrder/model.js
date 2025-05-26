@@ -7,6 +7,14 @@ const MissionOrder = sequelize.define('MissionOrder', {
         primaryKey: true,
         autoIncrement: true
     },
+    userId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
     firstName: { 
         type: DataTypes.STRING,
         allowNull: true
@@ -122,4 +130,25 @@ const MissionOrder = sequelize.define('MissionOrder', {
     paranoid: true
 });
 
-module.exports = MissionOrder;
+// مدل برای ارتباط many-to-many بین ماموریت و همراهان
+const MissionCompanion = sequelize.define('MissionCompanion', {
+    missionOrderId: {
+        type: DataTypes.INTEGER,
+        references: {
+            model: MissionOrder,
+            key: 'id'
+        }
+    },
+    userId: {
+        type: DataTypes.INTEGER,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    }
+}, {
+    tableName: 'mission_companions',
+    timestamps: true
+});
+
+module.exports = { MissionOrder, MissionCompanion };

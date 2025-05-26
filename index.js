@@ -50,7 +50,7 @@ const startServer = async () => {
     // تنظیمات Rate Limiting
     const limiter = rateLimit({
       windowMs: 15 * 60 * 100000, // 15 minutes
-      max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+      max: 500, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
       message: {
         status: 429,
         success: false,

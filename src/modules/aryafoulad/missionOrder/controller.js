@@ -1,8 +1,9 @@
 const BaseController = require('../../../core/baseController');
-const MissionOrder = require('./model');
+const { MissionOrder } = require('./model');
 const { Op } = require('sequelize');
 const QRCode = require('qrcode');
 const config = require('config');
+const { MissionCompanion } = require('./model');
 
 class MissionOrderController extends BaseController {
     constructor() {
@@ -60,7 +61,21 @@ class MissionOrderController extends BaseController {
                 }
             }
             
-            return this.response(res, 200, true, 'حکم ماموریت یافت شد.', doc);
+            // Fetch companions from MissionCompanion model
+            const companions = await MissionCompanion.findAll({
+                where: { missionOrderId: doc.id },
+                attributes: ['userId']
+            });
+            const companionIds = companions.map(companion => companion.userId);
+            
+            // Include userId and companions in the response
+            const responseData = {
+                ...doc.toJSON(),
+                userId: doc.userId,
+                companions: companionIds
+            };
+            
+            return this.response(res, 200, true, 'حکم ماموریت یافت شد.', responseData);
         } catch (err) {
             return this.response(res, 500, false, 'خطا در دریافت حکم ماموریت.', null, err);
         }
@@ -107,6 +122,8 @@ class MissionOrderController extends BaseController {
             console.log("estimatedReturnTime:", estimatedReturnTime);
             console.log("ratePerKm:", ratePerKm);
             console.log("finalCost:", finalCost);
+            console.log("userId:", req.body.userId);
+            console.log("companionIds:", req.body.companionIds);
 
             // Convert string values to numbers and handle destinations
             const data = {
@@ -129,13 +146,28 @@ class MissionOrderController extends BaseController {
                 estimatedReturnTime: estimatedReturnTime,
                 sessionCode: req.body.sessionCode || null,
                 ratePerKm: ratePerKm,
-                finalCost: finalCost
+                finalCost: finalCost,
+                userId: req.body.userId || null
             };
             
             console.log("=== Processed Data ===");
             console.log(JSON.stringify(data, null, 2));
             
             const doc = await MissionOrder.create(data);
+            console.log("=== Created Mission Order ===");
+            console.log(JSON.stringify(doc.toJSON(), null, 2));
+            
+            // اضافه کردن همراهان
+            if (req.body.companionIds && Array.isArray(req.body.companionIds)) {
+                console.log("=== Creating Companion Records ===");
+                const companionRecords = req.body.companionIds.map(userId => ({
+                    missionOrderId: doc.id,
+                    userId: userId
+                }));
+                console.log("Companion records to create:", JSON.stringify(companionRecords, null, 2));
+                const createdCompanions = await MissionCompanion.bulkCreate(companionRecords);
+                console.log("Created companions:", JSON.stringify(createdCompanions.map(c => c.toJSON()), null, 2));
+            }
             
             // تولید QR Code
             const qrCode = await this.generateQRCode(doc.id);
@@ -183,6 +215,8 @@ class MissionOrderController extends BaseController {
             // محاسبه مسافت و زمان برای یک یا چند مقصد
             let totalDistance = 0;
             let roundTripDistance = 0;
+            let estimatedTime = req.body.estimatedTime || '0';
+            let estimatedReturnTime = req.body.estimatedReturnTime || '0';
             
             if (destinations.length > 0) {
                 // اگر فقط یک مقصد داریم
@@ -203,27 +237,58 @@ class MissionOrderController extends BaseController {
             // استفاده از هزینه نهایی که از فرانت‌اند ارسال شده است
             const ratePerKm = parseFloat(req.body.ratePerKm) || 2500;
             const finalCost = parseFloat(req.body.finalCost) || 0;
-
-            // Convert string values to numbers and handle destinations
-            const data = {
-                ...req.body,
+            
+            // تبدیل companions به رشته
+            let companionsString = '';
+            if (Array.isArray(req.body.companions)) {
+                companionsString = req.body.companions.join(',');
+            } else if (typeof req.body.companions === 'string') {
+                companionsString = req.body.companions;
+            }
+            
+            // Update fields including userId and companions
+            const updatedData = {
+                firstName: req.body.firstName || null,
+                lastName: req.body.lastName || null,
+                personnelNumber: req.body.personnelNumber || null,
+                fromUnit: req.body.fromUnit || null,
+                day: req.body.day || null,
+                time: req.body.time || null,
+                destinations: JSON.stringify(destinations),
+                missionCoordinates: req.body.missionCoordinates || null,
+                missionSubject: req.body.missionSubject || null,
+                missionDescription: req.body.missionDescription || null,
+                companions: companionsString,
+                transport: req.body.transport || null,
                 totalWeightKg: req.body.totalWeightKg ? parseFloat(req.body.totalWeightKg) : null,
                 distance: totalDistance,
                 roundTripDistance: roundTripDistance,
-                destinations: JSON.stringify(destinations),
+                estimatedTime: estimatedTime,
+                estimatedReturnTime: estimatedReturnTime,
+                sessionCode: req.body.sessionCode || null,
                 ratePerKm: ratePerKm,
-                finalCost: finalCost
+                finalCost: finalCost,
+                userId: req.body.userId || null
             };
             
-            await doc.update(data);
-            
-            // تولید QR Code جدید
-            const qrCode = await this.generateQRCode(doc.id);
-            if (qrCode) {
-                await doc.update({ qrCode });
+            await doc.update(updatedData);
+
+            // به‌روزرسانی همراهان
+            if (req.body.companionIds && Array.isArray(req.body.companionIds)) {
+                // حذف همراهان قبلی
+                await MissionCompanion.destroy({
+                    where: { missionOrderId: doc.id }
+                });
+
+                // ایجاد همراهان جدید
+                const companionRecords = req.body.companionIds.map(userId => ({
+                    missionOrderId: doc.id,
+                    userId: userId
+                }));
+                await MissionCompanion.bulkCreate(companionRecords);
             }
             
-            // تبدیل destinations به آرایه قبل از ارسال پاسخ
+            // Parse destinations for response
             if (doc.destinations) {
                 try {
                     doc.destinations = JSON.parse(doc.destinations);
@@ -233,10 +298,10 @@ class MissionOrderController extends BaseController {
                 }
             }
             
-            return this.response(res, 200, true, 'حکم ماموریت با موفقیت بروزرسانی شد.', doc);
+            return this.response(res, 200, true, 'حکم ماموریت با موفقیت به‌روزرسانی شد.', doc);
         } catch (err) {
             console.error('Error updating mission order:', err);
-            return this.response(res, 500, false, 'خطا در بروزرسانی حکم ماموریت.', null, err);
+            return this.response(res, 500, false, 'خطا در به‌روزرسانی حکم ماموریت.', null, err);
         }
     }
 

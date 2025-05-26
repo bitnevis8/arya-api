@@ -3,16 +3,17 @@ const sequelize = require("./connection");
 // Import user module seeders
 const seedRoles = require("../../../modules/user/role/seeder");
 const seedUsers = require("../../../modules/user/user/seeder");
-const seedPermissions = require("../../../modules/user/permission/seeder");
-const seedRolePermissions = require("../../../modules/user/rolePermission/seeder");
 
 // Import aryafoulad module seeders
 const seedUnitLocations = require("../../../modules/aryafoulad/unitLocation/seeder");
 const seedRateSettings = require("../../../modules/aryafoulad/rateSettings/seeder");
+const seedWarehouses = require("../../../modules/aryafoulad/warehouseModule/warehouse/seeder");
+const seedItems = require("../../../modules/aryafoulad/warehouseModule/item/seeder");
+const seedInventories = require("../../../modules/aryafoulad/warehouseModule/inventory/seeder");
 
 // Group seeders by module for better organization and control
-const userSeeders = [seedRoles, seedUsers, seedPermissions, seedRolePermissions];
-const aryafouladSeeders = [seedUnitLocations, seedRateSettings];
+const userSeeders = [seedRoles, seedUsers];
+const aryafouladSeeders = [seedUnitLocations, seedRateSettings, seedWarehouses, seedItems, seedInventories];
 
 async function runSeederGroup(seeders, groupName) {
   console.log(`\nRunning ${groupName} Seeders...`);

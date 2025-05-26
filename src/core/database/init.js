@@ -6,10 +6,12 @@ const seedMongoDB = require("./mongodb/seeders");
 // Import MySQL models
 require("../../modules/user/user/model");
 require("../../modules/user/role/model");
-require("../../modules/user/permission/model");
 require("../../modules/user/associations");
 require("../../modules/aryafoulad/missionOrder/model");
 require("../../modules/aryafoulad/rateSettings/model");
+// require("../../modules/aryafoulad/warehouseModule/warehouse/model");
+// require("../../modules/aryafoulad/warehouseModule/inventory/model");
+require("../../modules/aryafoulad/warehouseModule/associations");
 
 /**
  * راه‌اندازی اتصال به دیتابیس‌ها و اجرای migrations
