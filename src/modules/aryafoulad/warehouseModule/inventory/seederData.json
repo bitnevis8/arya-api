@@ -1,35 +1,35 @@
 [
   {
-    "warehouseId": 1,
-    "itemId": 1,
+    "warehouse_id": 1,
+    "item_id": 1,
     "quantity": 5,
     "minQuantity": 1,
     "maxQuantity": 10
   },
   {
-    "warehouseId": 1,
-    "itemId": 2,
+    "warehouse_id": 1,
+    "item_id": 2,
     "quantity": 3,
     "minQuantity": 1,
     "maxQuantity": 8
   },
   {
-    "warehouseId": 1,
-    "itemId": 3,
+    "warehouse_id": 1,
+    "item_id": 3,
     "quantity": 4,
     "minQuantity": 1,
     "maxQuantity": 6
   },
   {
-    "warehouseId": 2,
-    "itemId": 1,
+    "warehouse_id": 2,
+    "item_id": 1,
     "quantity": 2,
     "minQuantity": 1,
     "maxQuantity": 5
   },
   {
-    "warehouseId": 2,
-    "itemId": 2,
+    "warehouse_id": 2,
+    "item_id": 2,
     "quantity": 3,
     "minQuantity": 1,
     "maxQuantity": 7
