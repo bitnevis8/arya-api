@@ -22,6 +22,10 @@ const ALLOWED_ORIGINS = {
     "https://www.parandx.com",
     "https://aryafoulad.parandx.com",
     "https://www.v2.parandx.com",
+    "https://pourdian.com",
+    "https://www.pourdian.com",
+    "https://aryafoulad.pourdian.com",
+    "https://aryafoulad-api.pourdian.com"
   ],
   development: [
     "http://localhost:3003",
