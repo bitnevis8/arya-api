@@ -27,15 +27,6 @@ User.init(
     isMobileVerified: { type: DataTypes.BOOLEAN, defaultValue: false },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
     lastLogin: { type: DataTypes.DATE, allowNull: true },
-    roleId: { 
-      type: DataTypes.INTEGER, 
-      allowNull: false, 
-      defaultValue: 2,
-      references: {
-        model: Role,
-        key: "id"
-      }
-    },
     avatar: { type: DataTypes.STRING, allowNull: true, defaultValue: null },
   },
   {

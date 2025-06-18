@@ -14,11 +14,11 @@ const { Op } = require("sequelize");
 function getCookieConfig(isProduction) {
   return {
     httpOnly: true,
-    secure: true, // همیشه true چون از HTTPS استفاده می‌کنیم
+    secure: isProduction, // در سرور `true` باشد، در لوکال `false`
     maxAge: 24 * 60 * 60 * 1000, // 24 ساعت
     path: "/",
     domain: isProduction ? ".parandx.com" : undefined, // برای دسترسی از همه ساب‌دامین‌ها
-    sameSite: "None", // برای کار با دامنه‌های مختلف (api و سایت اصلی)
+    sameSite: isProduction ? "None" : "Lax", // در سرور `None`، در لوکال `Lax`
   };
 }
 
@@ -61,7 +61,12 @@ class AuthController extends BaseController {
       // ✅ یافتن اطلاعات کامل کاربر
       const user = await this.User.findOne({
         where: { id: payload.userId },
-        include: [{ model: Role, as: "role" }],
+        include: [{
+          model: Role,
+          as: "roles", // Changed to 'roles' for many-to-many
+          attributes: ['id', 'name', 'nameEn', 'nameFa'], // Include necessary role attributes
+          through: { attributes: [] }, // Exclude UserRole attributes
+        }],
       });
 
       if (!user) {
@@ -73,11 +78,15 @@ class AuthController extends BaseController {
         userId: user.id,
         email: user.email,
         username: user.username,
-        roleId: user.roleId,
         firstName: user.firstName,
         lastName: user.lastName,
-        roleNameEn: user.role.nameEn,
-        roleNameFa: user.role.nameFa,
+        isEmailVerified: user.isEmailVerified,
+        roles: user.roles.map(role => ({
+          id: role.id,
+          name: role.name,
+          nameEn: role.nameEn,
+          nameFa: role.nameFa,
+        })), // Return an array of roles
       });
     } catch (error) {
       return this.response(res, 401, false, "توکن نامعتبر است.");
@@ -87,21 +96,7 @@ class AuthController extends BaseController {
   // 📌 -------------------------------------------------------------ثبت‌نام کاربر با ایمیل
   async registerWithEmail(req, res) {
     try {
-      console.log("📥 دریافت داده‌ها:", req.body);
-      // ✅ اعتبارسنجی ورودی‌ها
-      const schema = Joi.object({
-        firstName: Joi.string().required(),
-        lastName: Joi.string().required(),
-        email: Joi.string().email().required(),
-        username: Joi.string().required(),
-        password: Joi.string().min(6).required(),
-      });
-
-      const { error, value } = schema.validate(req.body);
-      if (error) {
-        console.warn("❌ Invalid registration input:", error.details[0].message);
-        return this.response(res, 400, false, error.details[0].message);
-      }
+      const value = req.body;
 
       // ✅ بررسی وجود کاربر
       const existingUser = await this.User.findOne({
@@ -126,7 +121,6 @@ class AuthController extends BaseController {
         emailVerificationSentAt: moment().toDate(),
         isEmailVerified: false,
         isActive: true,
-        roleId: 2,
       });
 
       // ✅ ارسال ایمیل تأییدیه
@@ -143,12 +137,51 @@ class AuthController extends BaseController {
       );
       console.log("✅ Email verification sent to:", value.email);
 
-      // در این مرحله توکن صادر نمی‌شود چون ایمیل هنوز تأیید نشده
+      // ✅ تولید JWT و ست کردن کوکی httpOnly
+      const secretKey = config.get("JWT.KEY");
+      const encoder = new TextEncoder();
+      const token = await new SignJWT({
+        userId: newUser.id,
+        email: newUser.email,
+        username: newUser.username,
+        isEmailVerified: false,
+      })
+        .setProtectedHeader({ alg: "HS256" })
+        .setExpirationTime("30d")
+        .sign(encoder.encode(secretKey));
+
+      const isProduction = process.env.NODE_ENV === "production";
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: isProduction,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: "/",
+        domain: isProduction ? ".parandx.com" : undefined,
+        sameSite: isProduction ? "None" : "Lax",
+      });
+
+      // ✅ بازیابی نقش‌ها برای کاربر جدید
+      const roles = await newUser.getRoles(); // فرض می‌کنیم متد getRoles در مدل User وجود دارد
+
       this.response(
         res,
         201,
         true,
-        "حساب کاربری ایجاد شد. کد تأیید به ایمیل ارسال شد."
+        "حساب کاربری ایجاد شد. کد تأیید به ایمیل ارسال شد.",
+        {
+          userId: newUser.id,
+          email: newUser.email,
+          username: newUser.username,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          isEmailVerified: newUser.isEmailVerified,
+          roles: roles.map(role => ({
+            id: role.id,
+            name: role.name,
+            nameEn: role.nameEn,
+            nameFa: role.nameFa,
+          })),
+        }
       );
     } catch (error) {
       console.error("❌ Email registration failed:", error.message);
@@ -159,22 +192,7 @@ class AuthController extends BaseController {
   // 📌 ثبت‌نام کاربر با موبایل
   async registerWithMobile(req, res) {
     try {
-      // ✅ اعتبارسنجی ورودی‌ها
-      const schema = Joi.object({
-        firstName: Joi.string().required(),
-        lastName: Joi.string().required(),
-        mobile: Joi.string()
-          .pattern(/^[0-9]{11}$/)
-          .required(),
-        username: Joi.string().required(),
-        password: Joi.string().min(6).required(),
-      });
-
-      const { error, value } = schema.validate(req.body);
-      if (error) {
-        console.warn("❌ Invalid mobile registration input:", error.details[0].message);
-        return this.response(res, 400, false, error.details[0].message);
-      }
+      const value = req.body;
 
       // ✅ بررسی وجود کاربر
       const existingUser = await this.User.findOne({
@@ -203,7 +221,6 @@ class AuthController extends BaseController {
         mobileVerifyCode,
         isMobileVerified: false,
         isActive: true,
-        roleId: 2,
       });
 
       // ✅ ارسال پیامک تأییدیه با `sms.ir`
@@ -261,11 +278,28 @@ class AuthController extends BaseController {
         sameSite: isProduction ? "None" : "Lax", // در سرور `None`، در لوکال `Lax`
       });
 
+      // ✅ بازیابی نقش‌ها برای کاربر جدید
+      const roles = await newUser.getRoles(); // فرض می‌کنیم متد getRoles در مدل User وجود دارد
+
       this.response(
         res,
         201,
         true,
-        "حساب کاربری ایجاد شد. کد تأیید به موبایل ارسال شد."
+        "حساب کاربری ایجاد شد. کد تأیید به موبایل ارسال شد.",
+        {
+          userId: newUser.id,
+          email: newUser.email,
+          username: newUser.username,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          isMobileVerified: newUser.isMobileVerified,
+          roles: roles.map(role => ({
+            id: role.id,
+            name: role.name,
+            nameEn: role.nameEn,
+            nameFa: role.nameFa,
+          })),
+        }
       );
     } catch (error) {
       console.error("❌ Mobile registration failed:", error.message);
@@ -331,7 +365,6 @@ class AuthController extends BaseController {
       const token = await new SignJWT({ 
         userId: user.id,
         email: user.email,
-        roleId: user.roleId 
       })
         .setProtectedHeader({ alg: "HS256" })
         .setExpirationTime("24h") // کاهش مدت زمان توکن به 24 ساعت
@@ -537,24 +570,20 @@ class AuthController extends BaseController {
   //---------------------------------------------------------------------------- 📌 ورود کاربر (Login)
   async login(req, res) {
     try {
-      // ✅ اعتبارسنجی ورودی‌ها
-      const schema = Joi.object({
-        identifier: Joi.string().required(), // ایمیل یا موبایل
-        password: Joi.string().min(6).required(),
-      });
-
-      const { error, value } = schema.validate(req.body);
-      if (error) {
-        console.warn("❌ Invalid login input:", error.details[0].message);
-        return this.response(res, 400, false, error.details[0].message);
-      }
+      const value = req.body;
+      console.log("Login attempt with identifier:", value.identifier);
 
       // ✅ بررسی کاربر بر اساس ایمیل یا موبایل
       const user = await this.User.findOne({
         where: {
           [Op.or]: [{ email: value.identifier }, { mobile: value.identifier }],
         },
-        include: [{ model: Role, as: "role", attributes: ["name"] }],
+        include: [{
+          model: Role,
+          as: "roles", // Changed to 'roles' to match the many-to-many association
+          attributes: ["id", "name", "nameEn", "nameFa"], // Include necessary role attributes
+          through: { attributes: [] }, // Exclude UserRole attributes
+        }],
       });
 
       if (!user) {
@@ -583,28 +612,8 @@ class AuthController extends BaseController {
         );
       }
 
-      // ✅ بررسی تأیید ایمیل یا موبایل
-      if (user.email && !user.isEmailVerified) {
-        console.warn("❌ Login failed: Email not verified", user.email);
-        return this.response(
-          res,
-          403,
-          false,
-          "لطفاً ابتدا ایمیل خود را تأیید کنید."
-        );
-      }
-
-      if (user.mobile && !user.isMobileVerified) {
-        console.warn("❌ Login failed: Mobile not verified", user.mobile);
-        return this.response(
-          res,
-          403,
-          false,
-          "لطفاً ابتدا شماره موبایل خود را تأیید کنید."
-        );
-      }
-
-      console.log("gggggggg" + user.role.name);
+      console.log("User object after fetching and before token generation:", JSON.stringify(user, null, 2));
+      console.log("User roles for tokenPayload:", user.roles);
 
       // ✅ تولید `JWT`
       const secretKey = config.get("JWT.KEY");
@@ -613,8 +622,12 @@ class AuthController extends BaseController {
         userId: user.id,
         email: user.email,
         username: user.username,
-        roleId: user.roleId,
-        roleName: user.role.name,
+        roles: user.roles && user.roles.length > 0 ? user.roles.map(role => ({ // Include all roles in the payload safely
+          id: role.id,
+          name: role.name,
+          nameEn: role.nameEn,
+          nameFa: role.nameFa,
+        })) : [], // If no roles, send an empty array
       };
 
       const token = await new SignJWT(tokenPayload)
@@ -631,16 +644,22 @@ class AuthController extends BaseController {
       res.cookie("token", token, getCookieConfig(isProduction));
 
       console.log("✅ User logged in successfully:", user.email || user.mobile);
+      console.log("Set-Cookie header sent:", res.getHeaders()['set-cookie']);
+      console.log("Cookie config used:", getCookieConfig(isProduction));
 
       this.response(res, 200, true, "ورود موفقیت‌آمیز بود.", {
         user: {
           userId: user.id,
           email: user.email,
           username: user.username,
-          roleId: user.roleId,
           firstName: user.firstName,
           lastName: user.lastName,
-          roleName: user.role.name
+          roles: user.roles && user.roles.length > 0 ? user.roles.map(role => ({ // Return all roles in the response safely
+            id: role.id,
+            name: role.name,
+            nameEn: role.nameEn,
+            nameFa: role.nameFa,
+          })) : [], // If no roles, return an empty array
         }
       });
     } catch (error) {

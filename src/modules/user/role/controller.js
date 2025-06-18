@@ -1,5 +1,7 @@
 const BaseController = require("../../../core/baseController");
 const Role = require("./model");
+const { User, UserRole } = require("../associations"); // Import User and UserRole models
+const sequelize = require("../../../core/database/mysql/connection"); // Import sequelize instance
 
 class RoleController extends BaseController {
   constructor() {
@@ -9,9 +11,28 @@ class RoleController extends BaseController {
   // ✅ دریافت تمام نقش‌ها
   async getAll(req, res) {
     try {
-      const roles = await Role.findAll();
+      const roles = await Role.findAll({
+        attributes: {
+          include: [
+            [sequelize.fn('COUNT', sequelize.col('users.id')), 'userCount'] // Count associated users
+          ]
+        },
+        include: [{
+          model: User,
+          as: 'users',
+          attributes: [], // We only need to count, so no user attributes are fetched
+          through: {
+            model: UserRole,
+            attributes: [], // We only need to count, so no UserRole attributes are fetched
+          },
+          required: false, // Use LEFT JOIN to include roles even if they have no users
+        }],
+        group: ['Role.id'], // Group by role id to count users per role
+        order: [['createdAt', 'DESC']] // Default sorting
+      });
       return this.response(res, 200, true, "لیست نقش‌ها دریافت شد.", roles);
     } catch (error) {
+      console.error("Error in getAll roles:", error);
       return this.response(res, 500, false, "خطا در دریافت داده‌ها", null, error);
     }
   }
@@ -19,7 +40,16 @@ class RoleController extends BaseController {
   // ✅ دریافت یک نقش با ID
   async getOne(req, res) {
     try {
-      const role = await Role.findByPk(req.params.id);
+      const { id } = req.params;
+      const role = await Role.findByPk(id, {
+        include: [{
+          model: User,
+          as: 'users',
+          through: { attributes: [] }, // Exclude UserRole attributes from the result
+          attributes: ['id', 'firstName', 'lastName', 'email', 'mobile'], // Specify user attributes to include
+        }],
+      });
+
       if (!role) {
         return this.response(res, 404, false, "نقش یافت نشد.");
       }

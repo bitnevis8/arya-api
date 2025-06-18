@@ -59,7 +59,10 @@ const authorizeRole = (requiredRole) => (req, res, next) => {
     console.log(req.user); // برای دیباگ
 
     // بررسی نقش کاربر (مدیر یا نه)
-    if (req.user.roleName !== requiredRole) {
+    // با توجه به رابطه چند به چند، req.user.roles اکنون یک آرایه از نقش‌ها است.
+    const hasRequiredRole = req.user.roles.some(role => role.nameEn === requiredRole);
+
+    if (!hasRequiredRole) {
       return res.status(403).json({
         success: false,
         message: `دسترسی غیرمجاز: این عملیات فقط برای نقش ${requiredRole} مجاز است`,

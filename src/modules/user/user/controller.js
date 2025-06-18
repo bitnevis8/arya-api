@@ -14,11 +14,20 @@ class UserController extends BaseController {
   async getAll(req, res) {
     try {
       console.log("Starting getAll method...");
+      const { sortBy, sortOrder } = req.query; // Get sortBy and sortOrder from query
+      const order = [];
+      const allowedSortColumns = ["firstName", "lastName", "email", "mobile", "username"];
+
+      if (sortBy && allowedSortColumns.includes(sortBy)) {
+        order.push([sortBy, sortOrder && sortOrder.toUpperCase() === "DESC" ? "DESC" : "ASC"]);
+      }
+
       const users = await User.findAll({
         include: [{
           model: Role,
-          as: "role"
-        }]
+          as: "roles"
+        }],
+        order: order.length > 0 ? order : [['createdAt', 'DESC']] // Default sort by createdAt DESC
       });
       console.log("✅ Users found successfully");
       return this.response(res, 200, true, "لیست کاربران دریافت شد.", users);
@@ -41,7 +50,7 @@ class UserController extends BaseController {
       const user = await User.findByPk(req.params.id, {
         include: [{
           model: Role,
-          as: "role"
+          as: "roles"
         }]
       });
       
@@ -69,7 +78,7 @@ class UserController extends BaseController {
         phone,
         username,
         password,
-        roleId,
+        roleIds,
         avatar,
       } = req.body;
 
@@ -84,7 +93,7 @@ class UserController extends BaseController {
         phone: Joi.string().optional(),
         username: Joi.string().optional(),
         password: Joi.string().min(6).required(),
-        roleId: Joi.number().required(),
+        roleIds: Joi.array().items(Joi.number().integer()).optional(),
         avatar: Joi.string().optional(),
       });
 
@@ -120,9 +129,18 @@ class UserController extends BaseController {
         phone: value.phone || null,
         username: value.username || null,
         password: value.password,
-        roleId: value.roleId,
         avatar: value.avatar || null,
       });
+
+      // اگر roleIds ارائه شده باشد، نقش‌ها را به کاربر اضافه کنید
+      if (value.roleIds && value.roleIds.length > 0) {
+        const roles = await Role.findAll({
+          where: {
+            id: value.roleIds
+          }
+        });
+        await newUser.setRoles(roles);
+      }
 
       console.log("✅ User created successfully:", newUser.id);
       return this.response(res, 201, true, "کاربر جدید ایجاد شد.", newUser);
@@ -149,7 +167,7 @@ class UserController extends BaseController {
         phone,
         username,
         password,
-        roleId,
+        roleIds,
         avatar,
       } = req.body;
 
@@ -161,7 +179,6 @@ class UserController extends BaseController {
         mobile: mobile ?? user.mobile,
         phone: phone ?? user.phone,
         username: username ?? user.username,
-        roleId: roleId ?? user.roleId,
         avatar: avatar ?? user.avatar,
       };
 
@@ -172,6 +189,19 @@ class UserController extends BaseController {
       // بروزرسانی اطلاعات کاربر
       await user.update(updates);
 
+      // اگر roleIds ارائه شده باشد، نقش‌های کاربر را بروزرسانی کنید
+      if (roleIds && roleIds.length > 0) {
+        const roles = await Role.findAll({
+          where: {
+            id: roleIds
+          }
+        });
+        await user.setRoles(roles);
+      } else if (roleIds && roleIds.length === 0) {
+        // If an empty array is provided, clear all roles
+        await user.setRoles([]);
+      }
+      
       console.log("✅ User updated successfully:", user.id);
       return this.response(res, 200, true, "کاربر بروزرسانی شد.", user);
     } catch (error) {
@@ -208,27 +238,49 @@ class UserController extends BaseController {
   // ✅ جستجوی کاربران
   async search(req, res) {
     try {
-      const { query } = req.query;
-      const users = await User.findAll({
-        where: {
-          [Op.or]: [
-            { firstName: { [Op.like]: `%${query}%` } },
-            { lastName: { [Op.like]: `%${query}%` } },
-            { email: { [Op.like]: `%${query}%` } },
-            { mobile: { [Op.like]: `%${query}%` } },
-          ],
-        },
+      const { q, limit = 10, offset = 0, sortBy, sortOrder } = req.query; // Get sortBy and sortOrder from query
+
+      const whereClause = {};
+      if (q) {
+        whereClause[Op.or] = [
+          { firstName: { [Op.like]: `%${q}%` } },
+          { lastName: { [Op.like]: `%${q}%` } },
+          { email: { [Op.like]: `%${q}%` } },
+          { mobile: { [Op.like]: `%${q}%` } },
+          { username: { [Op.like]: `%${q}%` } },
+        ];
+      }
+
+      const order = [];
+      const allowedSortColumns = ["firstName", "lastName", "email", "mobile", "username"];
+
+      if (sortBy && allowedSortColumns.includes(sortBy)) {
+        order.push([sortBy, sortOrder && sortOrder.toUpperCase() === "DESC" ? "DESC" : "ASC"]);
+      }
+
+      const users = await User.findAndCountAll({
+        where: whereClause,
         include: [{
           model: Role,
-          as: "role"
-        }]
+          as: "roles"
+        }],
+        order: order.length > 0 ? order : [['createdAt', 'DESC']], // Default sort by createdAt DESC
+        limit: parseInt(limit),
+        offset: parseInt(offset),
       });
 
-      console.log("✅ Users searched successfully with query:", query);
-      return this.response(res, 200, true, "جستجو با موفقیت انجام شد.", users);
+      console.log("✅ Users searched successfully:", users.count);
+      return this.response(res, 200, true, "نتایج جستجو دریافت شد.", users);
     } catch (error) {
       console.error("❌ Error in search:", error);
-      return this.response(res, 500, false, "خطا در جستجوی کاربران", null, error);
+      return this.response(
+        res,
+        500,
+        false,
+        error.message || "خطا در جستجو",
+        null,
+        error
+      );
     }
   }
 }

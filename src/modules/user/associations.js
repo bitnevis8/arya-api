@@ -1,18 +1,23 @@
 const User = require("./user/model");
 const Role = require("./role/model");
+const UserRole = require("./userRole/model");
 const { DataTypes } = require("sequelize");
 const sequelize = require("../../core/database/mysql/connection");
 
-// ارتباط User و Role (One-to-Many)
-User.belongsTo(Role, { 
-  foreignKey: "roleId", 
-  as: "role",
-  onDelete: 'RESTRICT',
-  onUpdate: 'CASCADE'
+// Many-to-Many association between User and Role
+User.belongsToMany(Role, {
+  through: UserRole,
+  foreignKey: 'userId',
+  as: 'roles',
 });
-Role.hasMany(User, { foreignKey: "roleId", as: "users" });
+Role.belongsToMany(User, {
+  through: UserRole,
+  foreignKey: 'roleId',
+  as: 'users',
+});
 
 module.exports = {
   User,
-  Role
+  Role,
+  UserRole
 }; 
